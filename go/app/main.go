@@ -1,21 +1,18 @@
 package main
 
 import (
-	// "database/sql"
-	"encoding/json"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
 	"path"
 	"strings"
 
-	// "github.com/mattn/go-sqlite3"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
 )
-
-var items Items
 
 const (
 	ImgDir = "image"
@@ -45,28 +42,18 @@ func addItem(c echo.Context) error {
 	category := c.FormValue("category")
 	c.Logger().Infof("Receive item: %s, %s", name, category)
 
-	// Create or Open file with write permission
-	f, err := os.Create("items.json")
+	// Open database
+	db, err := sql.Open("sqlite3", "../db/mercari.sqlite3")
 	if err != nil {
 		return err
 	}
-
-	// Store form data to item struct
-	item := Item{
-		Name: name,
-		Category: category,
-	}
-	// Add item struct to slice
-	items.Items = append(items.Items, item)
-
-	// Change items struct to json
-	s, err := json.MarshalIndent(items, "", "\t")
+	stmt, err := db.Prepare("INSERT INTO items(name, category) VALUES( ?, ? )")
 	if err != nil {
 		return err
 	}
-
-	// Write form data to file
-	_, err = f.Write(s)
+	defer stmt.Close()
+	// Insert data to database
+	_, err = stmt.Exec(name, category);
 	if err != nil {
 		return err
 	}
@@ -78,27 +65,30 @@ func addItem(c echo.Context) error {
 }
 
 func getItem(c echo.Context) error {
-	// Open file to read
-	f, err := os.Open("items.json")
+	// Open database
+	db, err := sql.Open("sqlite3", "../db/mercari.sqlite3")
 	if err != nil {
 		return err
 	}
 
-	// Read file
-	data := make([]byte, 1024)
-	count, err := f.Read(data)
+	// Get name and category data from database
+	rows, err := db.Query("SELECT name, category FROM items")
 	if err != nil {
 		return err
 	}
 
-	// Encode json to struct
-	var i Items
-	err = json.Unmarshal(data[:count], &i)
-	if err != nil {
-		return err
+	// Store data to Items struct
+	var items Items
+	for rows.Next() {
+		var item Item
+		if err := rows.Scan(&item.Name, &item.Category); err != nil {
+			return err
+		}
+		items.Items = append(items.Items, item)
 	}
+	rows.Close()
 
-	res := i
+	res := items
 	return c.JSON(http.StatusOK, res)
 }
 
