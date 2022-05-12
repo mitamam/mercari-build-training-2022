@@ -1,6 +1,7 @@
 package main
 
 import (
+	// "database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"path"
 	"strings"
 
+	// "github.com/mattn/go-sqlite3"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
@@ -58,7 +60,7 @@ func addItem(c echo.Context) error {
 	items.Items = append(items.Items, item)
 
 	// Change items struct to json
-	s, err := json.Marshal(items)
+	s, err := json.MarshalIndent(items, "", "\t")
 	if err != nil {
 		return err
 	}
