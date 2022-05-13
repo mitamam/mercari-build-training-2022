@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"io"
 	"os"
 	"path"
 	"strings"
@@ -29,9 +30,9 @@ type Items struct {
 }
 
 type Item struct {
-	Name     string `json:"name"`
+	Name	 string `json:"name"`
 	Category string `json:"category"`
-	Image    string `json:"image"`
+	Image	string `json:"image"`
 }
 
 func root(c echo.Context) error {
@@ -46,9 +47,19 @@ func addItem(c echo.Context) error {
 	image := c.FormValue("image")
 	c.Logger().Infof("Receive item: %s, %s, %s", name, category, image)
 
-	// hash the image file name with SHA-256
+	// Open the image
+	f, err := os.Open(image)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// hash the image with SHA-256
 	h := sha256.New()
-	h.Write([]byte(image))
+	_, err = io.Copy(h, f);
+	if err != nil {
+		return err
+	}
 	sum := hex.EncodeToString(h.Sum(nil)) + ".jpg"
 
 	// Open database
