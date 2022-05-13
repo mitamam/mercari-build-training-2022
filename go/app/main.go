@@ -70,23 +70,74 @@ func getItem(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 
 	// Get name and category data from database
 	rows, err := db.Query("SELECT name, category FROM items")
 	if err != nil {
 		return err
 	}
+	defer rows.Close()
 
 	// Store data to Items struct
 	var items Items
+	var item Item
 	for rows.Next() {
-		var item Item
-		if err := rows.Scan(&item.Name, &item.Category); err != nil {
+		err := rows.Scan(&item.Name, &item.Category);
+		if err != nil {
 			return err
 		}
 		items.Items = append(items.Items, item)
 	}
-	rows.Close()
+	err = rows.Err()
+	if err != nil {
+		return err
+	}
+
+	res := items
+	return c.JSON(http.StatusOK, res)
+}
+
+func searchItem(c echo.Context) error {
+	keyword := c.QueryParam("keyword")
+	c.Logger().Infof("Search by: %s", keyword)
+
+	// Open database
+	db, err := sql.Open("sqlite3", "../db/mercari.sqlite3")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// Prepare query to search items by keyword
+	stmt, err := db.Prepare("SELECT name, category FROM items WHERE name LIKE ?")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	// Search data from database
+	keyword = "%" + keyword + "%"
+	rows, err := stmt.Query(keyword)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	// Store search results to Items struct
+	var items Items
+	var item Item
+	for rows.Next() {
+		err := rows.Scan(&item.Name, &item.Category);
+		if err != nil {
+			return err
+		}
+		items.Items = append(items.Items, item)
+	}
+	err = rows.Err()
+	if err != nil {
+		return err
+	}
 
 	res := items
 	return c.JSON(http.StatusOK, res)
@@ -128,6 +179,7 @@ func main() {
 	e.GET("/", root)
 	e.GET("/items", getItem)
 	e.POST("/items", addItem)
+	e.GET("/search", searchItem)
 	e.GET("/image/:itemImg", getImg)
 
 	// Start server
