@@ -1,19 +1,18 @@
 package main
 
 import (
-	"encoding/json"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
 	"path"
 	"strings"
 
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
 )
-
-var items Items
 
 const (
 	ImgDir = "image"
@@ -43,28 +42,18 @@ func addItem(c echo.Context) error {
 	category := c.FormValue("category")
 	c.Logger().Infof("Receive item: %s, %s", name, category)
 
-	// Create or Open file with write permission
-	f, err := os.Create("items.json")
+	// Open database
+	db, err := sql.Open("sqlite3", "../db/mercari.sqlite3")
 	if err != nil {
 		return err
 	}
-
-	// Store form data to item struct
-	item := Item{
-		Name: name,
-		Category: category,
-	}
-	// Add item struct to slice
-	items.Items = append(items.Items, item)
-
-	// Change items struct to json
-	s, err := json.Marshal(items)
+	stmt, err := db.Prepare("INSERT INTO items(name, category) VALUES( ?, ? )")
 	if err != nil {
 		return err
 	}
-
-	// Write form data to file
-	_, err = f.Write(s)
+	defer stmt.Close()
+	// Insert data to database
+	_, err = stmt.Exec(name, category);
 	if err != nil {
 		return err
 	}
@@ -76,27 +65,81 @@ func addItem(c echo.Context) error {
 }
 
 func getItem(c echo.Context) error {
-	// Open file to read
-	f, err := os.Open("items.json")
+	// Open database
+	db, err := sql.Open("sqlite3", "../db/mercari.sqlite3")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// Get name and category data from database
+	rows, err := db.Query("SELECT name, category FROM items")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	// Store data to Items struct
+	var items Items
+	var item Item
+	for rows.Next() {
+		err := rows.Scan(&item.Name, &item.Category);
+		if err != nil {
+			return err
+		}
+		items.Items = append(items.Items, item)
+	}
+	err = rows.Err()
 	if err != nil {
 		return err
 	}
 
-	// Read file
-	data := make([]byte, 1024)
-	count, err := f.Read(data)
+	res := items
+	return c.JSON(http.StatusOK, res)
+}
+
+func searchItem(c echo.Context) error {
+	keyword := c.QueryParam("keyword")
+	c.Logger().Infof("Search by: %s", keyword)
+
+	// Open database
+	db, err := sql.Open("sqlite3", "../db/mercari.sqlite3")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// Prepare query to search items by keyword
+	stmt, err := db.Prepare("SELECT name, category FROM items WHERE name LIKE ?")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	// Search data from database
+	keyword = "%" + keyword + "%"
+	rows, err := stmt.Query(keyword)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	// Store search results to Items struct
+	var items Items
+	var item Item
+	for rows.Next() {
+		err := rows.Scan(&item.Name, &item.Category);
+		if err != nil {
+			return err
+		}
+		items.Items = append(items.Items, item)
+	}
+	err = rows.Err()
 	if err != nil {
 		return err
 	}
 
-	// Encode json to struct
-	var i Items
-	err = json.Unmarshal(data[:count], &i)
-	if err != nil {
-		return err
-	}
-
-	res := i
+	res := items
 	return c.JSON(http.StatusOK, res)
 }
 
@@ -136,6 +179,7 @@ func main() {
 	e.GET("/", root)
 	e.GET("/items", getItem)
 	e.POST("/items", addItem)
+	e.GET("/search", searchItem)
 	e.GET("/image/:itemImg", getImg)
 
 	// Start server
