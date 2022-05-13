@@ -31,6 +31,7 @@ type Items struct {
 type Item struct {
 	Name     string `json:"name"`
 	Category string `json:"category"`
+	Image    string `json:"image"`
 }
 
 func root(c echo.Context) error {
@@ -81,7 +82,7 @@ func getItem(c echo.Context) error {
 	defer db.Close()
 
 	// Get name and category data from database
-	rows, err := db.Query("SELECT name, category FROM items")
+	rows, err := db.Query("SELECT name, category, image FROM items")
 	if err != nil {
 		return err
 	}
@@ -91,7 +92,7 @@ func getItem(c echo.Context) error {
 	var items Items
 	var item Item
 	for rows.Next() {
-		err := rows.Scan(&item.Name, &item.Category);
+		err := rows.Scan(&item.Name, &item.Category, &item.Image);
 		if err != nil {
 			return err
 		}
