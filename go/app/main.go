@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -40,25 +42,31 @@ func addItem(c echo.Context) error {
 	// Get form data
 	name := c.FormValue("name")
 	category := c.FormValue("category")
-	c.Logger().Infof("Receive item: %s, %s", name, category)
+	image := c.FormValue("image")
+	c.Logger().Infof("Receive item: %s, %s, %s", name, category, image)
+
+	// hash the image file name with SHA-256
+	h := sha256.New()
+	h.Write([]byte(image))
+	sum := hex.EncodeToString(h.Sum(nil)) + ".jpg"
 
 	// Open database
 	db, err := sql.Open("sqlite3", "../db/mercari.sqlite3")
 	if err != nil {
 		return err
 	}
-	stmt, err := db.Prepare("INSERT INTO items(name, category) VALUES( ?, ? )")
+	stmt, err := db.Prepare("INSERT INTO items(name, category, image) VALUES( ?, ?, ? )")
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	// Insert data to database
-	_, err = stmt.Exec(name, category);
+	_, err = stmt.Exec(name, category, sum);
 	if err != nil {
 		return err
 	}
 
-	message := fmt.Sprintf("item received: %s, %s", name, category)
+	message := fmt.Sprintf("item received: %s, %s, %s", name, category, image)
 	res := Response{Message: message}
 
 	return c.JSON(http.StatusOK, res)
