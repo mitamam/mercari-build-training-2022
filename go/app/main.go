@@ -1,17 +1,21 @@
 package main
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
+	"image/jpeg"
+	"io"
 	"net/http"
 	"os"
 	"path"
 	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
@@ -29,6 +33,7 @@ type Items struct {
 type Item struct {
 	Name     string `json:"name"`
 	Category string `json:"category"`
+	Image    string `json:"image"`
 }
 
 func root(c echo.Context) error {
@@ -40,25 +45,65 @@ func addItem(c echo.Context) error {
 	// Get form data
 	name := c.FormValue("name")
 	category := c.FormValue("category")
-	c.Logger().Infof("Receive item: %s, %s", name, category)
+	image := c.FormValue("image")
+	c.Logger().Infof("Receive item: %s, %s, %s", name, category, image)
+
+	// Open an image
+	f, err := os.Open(image)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// hash an image with SHA-256
+	h := sha256.New()
+	_, err = io.Copy(h, f)
+	if err != nil {
+		return err
+	}
+	sum := hex.EncodeToString(h.Sum(nil)) + ".jpg"
+
+	// Open the image again
+	f, err = os.Open(image)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Create an image
+	i, err := os.Create("./images/" + sum)
+	if err != nil {
+		return err
+	}
+	defer i.Close()
+
+	// Decode and encode an image
+	img, err := jpeg.Decode(f)
+	if err != nil {
+		return err
+	}
+	err = jpeg.Encode(i, img, nil)
+	if err != nil {
+		return err
+	}
 
 	// Open database
 	db, err := sql.Open("sqlite3", "../db/mercari.sqlite3")
 	if err != nil {
 		return err
 	}
-	stmt, err := db.Prepare("INSERT INTO items(name, category) VALUES( ?, ? )")
+	stmt, err := db.Prepare("INSERT INTO items(name, category, image) VALUES( ?, ?, ? )")
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	// Insert data to database
-	_, err = stmt.Exec(name, category);
+	_, err = stmt.Exec(name, category, sum)
 	if err != nil {
 		return err
 	}
 
-	message := fmt.Sprintf("item received: %s, %s", name, category)
+	message := fmt.Sprintf("item received: %s, %s, %s", name, category, image)
 	res := Response{Message: message}
 
 	return c.JSON(http.StatusOK, res)
@@ -73,7 +118,7 @@ func getItem(c echo.Context) error {
 	defer db.Close()
 
 	// Get name and category data from database
-	rows, err := db.Query("SELECT name, category FROM items")
+	rows, err := db.Query("SELECT name, category, image FROM items")
 	if err != nil {
 		return err
 	}
@@ -83,7 +128,7 @@ func getItem(c echo.Context) error {
 	var items Items
 	var item Item
 	for rows.Next() {
-		err := rows.Scan(&item.Name, &item.Category);
+		err := rows.Scan(&item.Name, &item.Category, &item.Image)
 		if err != nil {
 			return err
 		}
@@ -128,7 +173,7 @@ func searchItem(c echo.Context) error {
 	var items Items
 	var item Item
 	for rows.Next() {
-		err := rows.Scan(&item.Name, &item.Category);
+		err := rows.Scan(&item.Name, &item.Category)
 		if err != nil {
 			return err
 		}
