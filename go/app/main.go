@@ -143,6 +143,27 @@ func getItem(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
+func getItemById(c echo.Context) error {
+	itemId := c.Param("itemId")
+
+	// Open database
+	db, err := sql.Open("sqlite3", "../db/mercari.sqlite3")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// Search an item by id from database
+	var item Item
+	err = db.QueryRow("SELECT name, category, image FROM items WHERE id = ?", itemId).Scan(&item.Name, &item.Category, &item.Image)
+	if err != nil {
+		return err
+	}
+
+	res := item
+	return c.JSON(http.StatusOK, res)
+}
+
 func searchItem(c echo.Context) error {
 	keyword := c.QueryParam("keyword")
 	c.Logger().Infof("Search by: %s", keyword)
@@ -223,6 +244,7 @@ func main() {
 	// Routes
 	e.GET("/", root)
 	e.GET("/items", getItem)
+	e.GET("/items/:itemId", getItemById)
 	e.POST("/items", addItem)
 	e.GET("/search", searchItem)
 	e.GET("/image/:itemImg", getImg)
