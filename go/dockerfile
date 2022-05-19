@@ -1,6 +1,23 @@
-# syntax=docker/dockerfile:1
+FROM alpine
 
-FROM golang:alpine
+WORKDIR /
+
+RUN apk update && apk --no-cache add gcc go sqlite
+
+COPY go.mod ./
+COPY go.sum ./
+
+RUN go mod download
+
+RUN mkdir app db images
+COPY app/main.go /app
+COPY image/default.jpg /images
+
+WORKDIR /db
+RUN sqlite3 mercari.sqlite3 \
+ "CREATE TABLE items(id INTEGER PRIMARY KEY , name TEXT, category TEXT, image TEXT);"
 
 # STEP4-4では以下は変更しない
-CMD ["go", "version"]
+# CMD ["go", "version"]
+WORKDIR /
+CMD [ "go", "run", "app/main.go" ]
