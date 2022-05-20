@@ -2,7 +2,10 @@ FROM alpine
 
 WORKDIR /
 
-RUN apk update && apk --no-cache add gcc go sqlite
+RUN apk update && apk --no-cache add \
+	gcc \
+	go \
+	sqlite
 
 COPY go.mod ./
 COPY go.sum ./
@@ -18,6 +21,5 @@ RUN sqlite3 mercari.sqlite3 \
  "CREATE TABLE items(id INTEGER PRIMARY KEY , name TEXT, category TEXT, image TEXT);"
 
 # STEP4-4では以下は変更しない
-# CMD ["go", "version"]
 WORKDIR /
 CMD [ "go", "run", "app/main.go" ]
